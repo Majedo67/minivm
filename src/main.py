@@ -1,5 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
+from pathlib import Path
+import subprocess
 
 root = tk.Tk()
 root.title("MiniVM")
@@ -7,24 +9,54 @@ root.geometry("600x420")
 root.configure(bg="#101827")
 root.resizable(False, False)
 
-ram = tk.StringVar(value="512 MB")
-iso_path = tk.StringVar(value="No ISO selected")
+ram = tk.StringVar(value="256 MB")
 
-
-def choose_iso():
-    path = filedialog.askopenfilename(
-        title="Select operating system ISO",
-        filetypes=[("ISO files", "*.iso"), ("All files", "*.*")]
-    )
-    if path:
-        iso_path.set(path)
+project_dir = Path(__file__).resolve().parent.parent
+bochs_exe = Path(r"C:\Program Files\Bochs-3.1\bochs.exe")
+config_file = project_dir / "config" / "bochsrc"
 
 
 def start_vm():
-    messagebox.showinfo(
-        "MiniVM",
-        "The interface is ready! The Bochs engine is not connected yet."
-    )
+    if not bochs_exe.is_file():
+        messagebox.showerror(
+            "Bochs not found",
+            "Bochs was not found at:\n" + str(bochs_exe)
+        )
+        return
+
+    if not config_file.is_file():
+        messagebox.showerror(
+            "Configuration missing",
+            "Could not find config\\bochsrc in the MiniVM folder."
+        )
+        return
+
+    try:
+        config_text = config_file.read_text(encoding="utf-8")
+        ram_mb = {"256 MB": 256, "512 MB": 512, "1 GB": 1024, "2 GB": 2048}[ram.get()]
+        lines = config_text.splitlines()
+        updated = []
+        replaced = False
+
+        for line in lines:
+            if line.strip().lower().startswith("megs:"):
+                updated.append(f"megs: {ram_mb}")
+                replaced = True
+            else:
+                updated.append(line)
+
+        if not replaced:
+            updated.insert(0, f"megs: {ram_mb}")
+
+        launch_config = project_dir / "config" / "bochsrc.launch"
+        launch_config.write_text("\n".join(updated) + "\n", encoding="utf-8")
+
+        subprocess.Popen(
+            [str(bochs_exe), "-f", str(launch_config)],
+            cwd=str(project_dir)
+        )
+    except Exception as error:
+        messagebox.showerror("MiniVM error", str(error))
 
 
 tk.Label(
@@ -63,7 +95,7 @@ ttk.Combobox(
 
 tk.Label(
     panel,
-    text="Operating System ISO",
+    text="Operating System",
     fg="white",
     bg="#1e293b",
     font=("Segoe UI", 12, "bold")
@@ -71,22 +103,10 @@ tk.Label(
 
 tk.Label(
     panel,
-    textvariable=iso_path,
+    text="MiniVM OS 1.0 (built-in disk image)",
     fg="#94a3b8",
-    bg="#1e293b",
-    wraplength=470
+    bg="#1e293b"
 ).pack(anchor="w", pady=8)
-
-tk.Button(
-    panel,
-    text="Choose ISO",
-    command=choose_iso,
-    bg="#334155",
-    fg="white",
-    relief="flat",
-    padx=15,
-    pady=8
-).pack(anchor="w")
 
 tk.Button(
     root,
